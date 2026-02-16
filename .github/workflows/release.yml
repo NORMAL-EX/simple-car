@@ -1,0 +1,140 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Build APK (release)
+        working-directory: app
+        run: flutter build apk --release
+
+      - name: Rename APK
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          cp app/build/app/outputs/flutter-apk/app-release.apk simple-car-${VERSION}.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: simple-car-*.apk
+
+  build-firmware:
+    name: Build ESP32-C3 Firmware
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build firmware
+        working-directory: firmware
+        run: pio run
+
+      - name: Package firmware
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          cp firmware/.pio/build/esp32c3/firmware.bin firmware-esp32c3-${VERSION}.bin
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: firmware-esp32c3-*.bin
+
+  release:
+    name: Create Release
+    needs: [build-apk, build-firmware]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: apk
+
+      - name: Download firmware
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          cat << 'NOTES' > release_notes.md
+          ## 📦 下载
+
+          | 文件 | 说明 |
+          |------|------|
+          | `simple-car-VERSION.apk` | Android App（发送端 + 接收端） |
+          | `firmware-esp32c3-VERSION.bin` | ESP32-C3 固件 |
+
+          ## 🚀 使用方法
+
+          1. 两部手机安装 APK
+          2. ESP32-C3 烧录固件：`esptool.py write_flash 0x0 firmware-esp32c3-VERSION.bin`
+          3. 发送端手机装车，选择「发送端」
+          4. 接收端手机选择「接收端」，扫码连接
+
+          ## ⚡ ESP32 烧录
+
+          ```bash
+          pip install esptool
+          esptool.py --chip esp32c3 --port /dev/ttyUSB0 write_flash 0x0 firmware-esp32c3-VERSION.bin
+          ```
+          NOTES
+          sed -i "s/VERSION/${VERSION}/g" release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_notes.md
+          files: |
+            simple-car-*.apk
+            firmware-esp32c3-*.bin
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          append_body: true
