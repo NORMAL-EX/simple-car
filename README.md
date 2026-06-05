@@ -1,0 +1,145 @@
+# Simple Car
+
+开源 RC 遥控车项目 —— 使用两部手机 + ESP32 实现实时视频图传和遥控。
+
+## 工作原理
+
+```
+┌──────────────┐    IPv6/TCP     ┌──────────────┐      BLE       ┌──────────┐
+│   接收端手机   │ ──────────────> │   发送端手机   │ ────────────> │  ESP32   │
+│  (遥控 + 看)  │  WebRTC视频流   │  (车上摄像头)  │  控制指令      │ (PWM输出) │
+│              │  控制指令        │              │               │          │
+│  摇杆 → RC指令 │ <────────────  │  GPS/电量/状态  │               │ 舵机+电调  │
+└──────────────┘    信令通道      └──────────────┘               └──────────┘
+```
+
+**数据流：**
+1. **接收端**（你手里的手机）：扫码连接发送端，显示实时视频，通过摇杆发送控制指令
+2. **发送端**（装在车上的手机）：采集摄像头画面通过 WebRTC 传输，接收控制指令并通过 BLE 转发给 ESP32
+3. **ESP32**（ESP32-C3 Super Mini）：接收 BLE 控制指令，输出 PWM 信号驱动舵机和电调
+
+## 功能特性
+
+- 📹 **实时视频图传** — 基于 WebRTC，支持多分辨率切换（480p ~ 1080p）
+- 🎮 **遥控控制** — 单摇杆 / 双摇杆模式，可调方向和油门力度
+- 📍 **GPS 定位** — 实时显示车辆位置和速度（地图 + 速度表）
+- 🔦 **远程控制** — 手电筒、摄像头切换、画中画双摄
+- 🎤 **语音对讲** — 长按 PTT 对讲，支持音频文件播放
+- 🔋 **电量监控** — 手机电量 + ESP32 车辆电池电量
+- 🔗 **扫码连接** — 发送端生成 QR 码，接收端扫码直连（IPv6）
+
+## 硬件需求
+
+| 组件 | 说明 |
+|------|------|
+| Android 手机 × 2 | 一部装车，一部遥控（需支持 IPv6） |
+| ESP32-C3 Super Mini | BLE 控制器，输出 PWM |
+| RC 车底盘 | 带舵机 + 电调 |
+| 2S LiPo 电池 | 给车和 ESP32 供电 |
+
+## 电路连接
+
+详见 [`firmware/CIRCUIT.md`](firmware/CIRCUIT.md)
+
+```
+ESP32-C3 GPIO6  ──>  舵机信号线 (PWM 转向)
+ESP32-C3 GPIO7  ──>  电调信号线 (PWM 油门)
+ESP32-C3 GPIO3  ──>  电池检测 (100KΩ + 47KΩ 分压)
+```
+
+## 快速开始
+
+### 1. 烧录 ESP32 固件
+
+需要 [PlatformIO](https://platformio.org/)：
+
+```bash
+cd firmware
+pio run --target upload
+```
+
+### 2. 构建 Flutter App
+
+需要 [Flutter SDK](https://flutter.dev/)：
+
+```bash
+cd app
+flutter pub get
+flutter build apk
+```
+
+两部手机都安装同一个 APK。
+
+### 3. 使用
+
+1. **发送端手机**装在车上，打开 App 选择「发送端」，等待生成二维码
+2. **接收端手机**打开 App 选择「接收端」，扫描二维码连接
+3. 连接成功后即可看到视频画面，用摇杆控制车辆
+
+## 项目结构
+
+```
+simple-car/
+├── app/                          # Flutter 手机 App
+│   ├── lib/
+│   │   ├── main.dart             # 入口
+│   │   ├── screens/
+│   │   │   ├── role_selection_screen.dart   # 角色选择（发送端/接收端）
+│   │   │   ├── sender_screen.dart          # 发送端（摄像头 + QR码 + ESP32）
+│   │   │   └── receiver_screen.dart        # 接收端（视频 + 摇杆 + 控制）
+│   │   └── services/
+│   │       ├── webrtc_service.dart          # WebRTC 视频/音频/数据通道
+│   │       ├── signaling_service.dart       # TCP 信令服务
+│   │       ├── esp32_service.dart           # BLE 连接 ESP32
+│   │       ├── dual_camera_service.dart     # 双摄像头（画中画）
+│   │       └── native_wakelock.dart         # 屏幕常亮
+│   ├── android/                  # Android 原生代码
+│   └── pubspec.yaml
+├── firmware/                     # ESP32 固件
+│   ├── src/main.cpp              # BLE + PWM 控制
+│   ├── platformio.ini
+│   └── CIRCUIT.md                # 电路图
+├── LICENSE
+└── README.md
+```
+
+## 通信协议
+
+### 信令（TCP Socket）
+
+发送端启动 TCP Server（端口 8765），接收端扫码后连接。所有消息为 JSON + 换行符。
+
+| 消息类型 | 方向 | 说明 |
+|---------|------|------|
+| `offer` / `answer` | 双向 | WebRTC SDP 交换 |
+| `candidate` | 双向 | ICE Candidate |
+| `gps_update` | 发送→接收 | GPS 坐标、速度、海拔 |
+| `battery_update` | 发送→接收 | 手机电量 |
+| `esp32_status` | 发送→接收 | ESP32 连接状态 |
+| `esp32_battery` | 发送→接收 | 车辆电池电量 |
+| `resolution_request` | 接收→发送 | 切换分辨率 |
+| `flashlight_toggle` | 接收→发送 | 开关手电筒 |
+| `camera_switch` | 接收→发送 | 前后摄像头切换 |
+| `bitrate_config` | 接收→发送 | 码率调整 |
+| `orientation_config` | 接收→发送 | 横屏/竖屏 |
+| `pip_config` | 接收→发送 | 画中画开关 |
+| `disconnect` | 双向 | 断开连接 |
+
+### 遥控指令（WebRTC DataChannel → BLE）
+
+格式：`RC:S:{steering},T:{throttle}`
+
+- `steering`: 1000~2000，1500 为中位
+- `throttle`: 1000~2000，1500 为停止
+
+### BLE 协议（ESP32）
+
+| UUID | 说明 |
+|------|------|
+| `12345678-...-abc` | Service |
+| `12345678-...-abd` | 命令特征（Write NR）—— 接收 `S:{s},T:{t}` |
+| `12345678-...-abe` | 电池特征（Notify）—— 发送电池百分比 |
+
+## License
+
+[MIT](LICENSE) © 2026 NORMAL-EX

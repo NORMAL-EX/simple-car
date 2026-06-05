@@ -1,0 +1,67 @@
+name: simple_car
+description: "Open-source RC car controller with real-time video streaming via WebRTC and ESP32 BLE control."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # WebRTC for video streaming
+  flutter_webrtc: ^0.10.8
+  
+  # QR Code generation and scanning
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.2.3
+  
+  # Permission handling
+  permission_handler: ^11.3.1
+  
+  # Network utilities
+  network_info_plus: ^6.0.1
+  
+  # GPS location
+  location: ^5.0.3
+  
+  # Screen wakelock
+  wakelock_plus: ^1.2.8
+  
+  # Map display
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.1
+  
+  # Battery info
+  battery_plus: ^5.0.2
+
+  # Bluetooth for ESP32
+  flutter_blue_plus: ^1.31.0
+
+  # Settings storage
+  shared_preferences: ^2.2.2
+
+  # Audio playback
+  audioplayers: ^5.2.1
+
+  # File picker
+  file_picker: ^6.1.1
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#1a1a1a"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
+
+flutter:
+  uses-material-design: true
