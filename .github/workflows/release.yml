@@ -131,11 +131,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          body_path: release_notes.md
           files: |
             simple-car-*.apk
             firmware-esp32c3-*.bin
           draft: false
           prerelease: false
-          generate_release_notes: true
-          append_body: true
